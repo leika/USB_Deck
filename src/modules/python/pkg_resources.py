@@ -6,7 +6,7 @@ def resource_stream(package, resource):
     if package not in c:
         try:
             if package:
-                p = __import__(package + ".R", None, None, True)
+                p = __import__(f"{package}.R", None, None, True)
             else:
                 p = __import__("R")
             c[package] = p.R
@@ -19,7 +19,7 @@ def resource_stream(package, resource):
 #            if d[0] != "/":
 #                import uos
 #                d = uos.getcwd() + "/" + d
-            c[package] = d + "/"
+            c[package] = f"{d}/"
 
     p = c[package]
     if isinstance(p, dict):
