@@ -105,10 +105,7 @@ class EventLoop:
                 self.cur_task = cb
                 delay = 0
                 try:
-                    if args is ():
-                        ret = next(cb)
-                    else:
-                        ret = cb.send(*args)
+                    ret = next(cb) if args is () else cb.send(*args)
                     if __debug__ and DEBUG:
                         log.info("Coroutine %s yield result: %s", cb, ret)
                     if isinstance(ret, SysCall1):
@@ -168,8 +165,7 @@ class EventLoop:
                     tnow = self.time()
                     t = self.waitq.peektime()
                     delay = time.ticks_diff(t, tnow)
-                    if delay < 0:
-                        delay = 0
+                    delay = max(delay, 0)
             self.wait(delay)
 
     def run_until_complete(self, coro):

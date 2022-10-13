@@ -28,10 +28,10 @@ def get_mime_type(fname):
 def sendstream(writer, f):
     buf = bytearray(64)
     while True:
-        l = f.readinto(buf)
-        if not l:
+        if l := f.readinto(buf):
+            yield from writer.awrite(buf, 0, l)
+        else:
             break
-        yield from writer.awrite(buf, 0, l)
 
 
 def jsonify(writer, dict):
@@ -47,7 +47,7 @@ def start_response(writer, content_type="text/html", status="200", headers=None)
         yield from writer.awrite("\r\n\r\n")
         return
     yield from writer.awrite("\r\n")
-    if isinstance(headers, bytes) or isinstance(headers, str):
+    if isinstance(headers, (bytes, str)):
         yield from writer.awrite(headers)
     else:
         for k, v in headers.items():
@@ -81,14 +81,8 @@ class HTTPRequest:
 class WebApp:
 
     def __init__(self, pkg, routes=None, serve_static=True):
-        if routes:
-            self.url_map = routes
-        else:
-            self.url_map = []
-        if pkg and pkg != "__main__":
-            self.pkg = pkg.split(".", 1)[0]
-        else:
-            self.pkg = None
+        self.url_map = routes or []
+        self.pkg = pkg.split(".", 1)[0] if pkg and pkg != "__main__" else None
         if serve_static:
             self.url_map.append((re.compile("^/(static/.+)"), self.handle_static))
         self.mounts = []
@@ -117,7 +111,7 @@ class WebApp:
             request_line = yield from reader.readline()
             if request_line == b"":
                 if self.debug >= 0:
-                    self.log.error("%s: EOF on request start" % reader)
+                    self.log.error(f"{reader}: EOF on request start")
                 yield from writer.aclose()
                 return
             req = HTTPRequest()
@@ -127,9 +121,7 @@ class WebApp:
             if self.debug >= 0:
                 self.log.info('%.3f %s %s "%s %s"' % (utime.time(), req, writer, method, path))
             path = path.split("?", 1)
-            qs = ""
-            if len(path) > 1:
-                qs = path[1]
+            qs = path[1] if len(path) > 1 else ""
             path = path[0]
 
             #print("================")
@@ -148,7 +140,7 @@ class WebApp:
                         found = True
                         path = path[len(root):]
                         if not path.startswith("/"):
-                            path = "/" + path
+                            path = f"/{path}"
                         break
                 if not found:
                     break
@@ -170,22 +162,12 @@ class WebApp:
                     found = True
                     break
                 elif not isinstance(pattern, str):
-                    # Anything which is non-string assumed to be a ducktype
-                    # pattern matcher, whose .match() method is called. (Note:
-                    # Django uses .search() instead, but .match() is more
-                    # efficient and we're not exactly compatible with Django
-                    # URL matching anyway.)
-                    m = pattern.match(path)
-                    if m:
+                    if m := pattern.match(path):
                         req.url_match = m
                         found = True
                         break
 
-            if not found:
-                headers_mode = "skip"
-            else:
-                headers_mode = extra.get("headers", self.headers_mode)
-
+            headers_mode = extra.get("headers", self.headers_mode) if found else "skip"
             if headers_mode == "skip":
                 while True:
                     l = yield from reader.readline()
@@ -205,7 +187,7 @@ class WebApp:
             else:
                 yield from start_response(writer, status="404")
                 yield from writer.awrite("404\r\n")
-            #print(req, "After response write")
+                #print(req, "After response write")
         except Exception as e:
             if self.debug >= 0:
                 self.log.exc(e, "%.3f %s %s %r" % (utime.time(), req, writer, e))
@@ -294,7 +276,7 @@ class WebApp:
                 app.init()
         loop = asyncio.get_event_loop()
         if debug > 0:
-            print("* Running on http://%s:%s/" % (host, port))
+            print(f"* Running on http://{host}:{port}/")
         loop.create_task(asyncio.start_server(self._handle, host, port))
         loop.run_forever()
         loop.close()

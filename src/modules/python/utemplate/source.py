@@ -47,15 +47,12 @@ class Compiler:
 
     def render_expr(self, e):
         self.indent()
-        self.file_out.write('yield str(' + e + ')\n')
+        self.file_out.write(f'yield str({e}' + ')\n')
 
     def parse_statement(self, stmt):
         tokens = stmt.split(None, 1)
         if tokens[0] == "args":
-            if len(tokens) > 1:
-                self.args = tokens[1]
-            else:
-                self.args = ""
+            self.args = tokens[1] if len(tokens) > 1 else ""
         elif tokens[0] == "set":
             self.indent()
             self.file_out.write(stmt[3:].strip() + "\n")
@@ -64,9 +61,7 @@ class Compiler:
                 # If there was no other output, we still need a header now
                 self.indent()
             tokens = tokens[1].split(None, 1)
-            args = ""
-            if len(tokens) > 1:
-                args = tokens[1]
+            args = tokens[1] if len(tokens) > 1 else ""
             if tokens[0][0] == "{":
                 self.indent()
                 # "1" as fromlist param is uPy hack
@@ -91,16 +86,15 @@ class Compiler:
                 self.indent()
                 self.file_out.write(stmt + ":\n")
                 self.stack.append(tokens[0])
+        elif stmt.startswith("end"):
+            assert self.stack[-1] == stmt[3:]
+            self.stack.pop(-1)
+        elif stmt == "else":
+            assert self.stack[-1] == "if"
+            self.indent(-1)
+            self.file_out.write("else:\n")
         else:
-            if stmt.startswith("end"):
-                assert self.stack[-1] == stmt[3:]
-                self.stack.pop(-1)
-            elif stmt == "else":
-                assert self.stack[-1] == "if"
-                self.indent(-1)
-                self.file_out.write("else:\n")
-            else:
-                assert False
+            assert False
 
     def parse_line(self, l):
         while l:
@@ -158,12 +152,7 @@ class Loader(compiled.Loader):
         self.pkg_path = ""
         if pkg:
             p = __import__(pkg)
-            if isinstance(p.__path__, str):
-                # uPy
-                self.pkg_path = p.__path__
-            else:
-                # CPy
-                self.pkg_path = p.__path__[0]
+            self.pkg_path = p.__path__ if isinstance(p.__path__, str) else p.__path__[0]
             self.pkg_path += "/"
 
     def input_open(self, template):
@@ -171,7 +160,7 @@ class Loader(compiled.Loader):
         return open(path)
 
     def compiled_path(self, template):
-        return self.dir + "/" + template.replace(".", "_") + ".py"
+        return f"{self.dir}/" + template.replace(".", "_") + ".py"
 
     def load(self, name):
         try:
@@ -182,9 +171,8 @@ class Loader(compiled.Loader):
         compiled_path = self.pkg_path + self.compiled_path(name)
 
         f_in = self.input_open(name)
-        f_out = open(compiled_path, "w")
-        c = Compiler(f_in, f_out, loader=self)
-        c.compile()
-        f_in.close()
-        f_out.close()
+        with open(compiled_path, "w") as f_out:
+            c = Compiler(f_in, f_out, loader=self)
+            c.compile()
+            f_in.close()
         return super().load(name)

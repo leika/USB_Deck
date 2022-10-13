@@ -1,12 +1,9 @@
 class Loader:
 
     def __init__(self, pkg, dir):
-        if dir == ".":
-            dir = ""
-        else:
-            dir = dir.replace("/", ".") + "."
+        dir = "" if dir == "." else dir.replace("/", ".") + "."
         if pkg and pkg != "__main__":
-            dir = pkg + "." + dir
+            dir = f"{pkg}.{dir}"
         self.p = dir
 
     def load(self, name):
